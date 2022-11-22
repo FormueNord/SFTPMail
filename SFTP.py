@@ -1,16 +1,116 @@
 from pysftp import Connection, CnOpts
+from typing import Callable
 import os
 
 class SFTP:
+    """
+    Represents a SFTP connection with methods to do basic communication using SFTP
     
-    required_paths = ["Inbox","Outbox","Sent"]
+    INPUT:
+        host (str): server host name
+        username (str): username used for authentication
+        private_key (str): path to the SSH private key used to authenticate
+        knownhosts_path (str): path to .txt file containing known hosts' fingerprints
 
-    def __init__(self, host: str, username: str, SSH_private_path: str, knownhosts_path: str):
+    ATTRIBUTES:
+        host (str): server host name
+        username (str): username used for authentication
+        private key (str): path to the SSH private key used to authenticate
+        cnopts (CnOpts): pysftp.CnOpts instance containing known hosts
+    """
+
+    # defines the paths required to run the class.
+    # if missing these paths will be created in the working directory
+    required_paths = ["Inbox","Outbox","Sent","Awaiting"]
+
+    def __init__(self, host: str, username: str, private_key: str, knownhosts_path: str):
         self._check_if_setup()
         self.host = host
         self.username = username
-        self.SSH_private_path = SSH_private_path
-        #self.knownhosts = CnOpts(knownhosts_path)
+        self.private_key = private_key
+        self.cnopts = CnOpts(knownhosts_path)
+
+    def _open_connection_decorator(connection_call_back: Callable, **kwargs):
+        """
+        Decorator to execute Callable within the context of the SFTP connection
+        """
+        def _open_connection(self):
+            with Connection(
+                self.host,
+                self.username,
+                private_key=self.private_key,
+                cnopts = self.cnopts) as sftp:
+                connection_call_back(sftp, **kwargs)
+        return _open_connection
+
+    @_open_connection_decorator
+    def send_to(self,sftp: Connection, remote_path: str):
+        """
+        Sends all files in the Outbox folder to the specified remote_path using SFTP.
+        Prior to being sent files are placed in the Awaiting folder.
+
+        INPUT:
+            remote_path (str): path to the remote destination
+        """
+        # get relative path to files
+        files = os.listdir("Outbox")
+        for file in files:
+            outbox_path = os.join("Outbox",file)
+            awaiting_path = os.join("Awaiting",file)
+            # File is moved to make sure failed file deliveries don't clog up the system
+            # Or make sure the same file can't mistakently be sent twice
+            os.rename(outbox_path,awaiting_path)
+
+            # Copy file to remote destination
+            remote_path = os.join(remote_path,file)
+            sftp.put(awaiting_path,remote_path)
+            
+            # Move file to sent
+            sent_path = os.join("Sent",file)
+            os.rename(awaiting_path,sent_path)
+
+    @_open_connection_decorator
+    def receive_from(self, sftp: Connection, remote_path: str):
+        """
+        Fetch all files on the remote path and place them into the local Inbox folder
+
+        INPUT:
+            remote_path (str): path to the remote destination from which files are fetched
+        """
+        remote_files = sftp.listdir(remote_path)
+        for file_name in remote_files:
+            remote_file_path = os.join(remote_path, file_name)
+            # make sure a unique name is given to the file
+            local_path = self._non_conflicting_name("Inbox",file_name)
+            sftp.get(remote_file_path,local_path, preserve_mtime = True)
+            sftp.remove(remote_path)
+
+
+    def _non_conflicting_name(self, local_path: str, file_name: str, iterator = 0):
+        """
+        Check if the filename already exists within the local folder.
+        If there's a conflict add _x (where x is a number) to make a non-conflicting file name
+
+        INPUT:
+            local_path (str): relative local path to a folder
+            file_name (str): name of the file
+
+        RETURNS:
+            (str) non-conflicting filename
+        """
+        file_path = os.join(local_path, file_name)
+        if os.path.exists(file_path):
+            iterator += 1
+
+            # add _x as suffix to the file name
+            file_name = file_name.split(".")
+            file_name[0] = file_name[0] + "_" + str(iterator)
+            file_name = ".".join(file_name)
+
+            # recurse until a non-conflicting name is found
+            file_path = self._new_file_name(local_path, file_name, iterator = iterator)
+        return file_path
+
 
     def _check_if_setup(self):
         """
