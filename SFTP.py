@@ -2,6 +2,17 @@ from pysftp import Connection, CnOpts
 from typing import Callable
 import os
 
+
+
+def _open_connection_decorator(func: Callable):
+    """
+    Decorator to execute Callable within the context of the SFTP connection
+    """
+    def _open_connection(*args, **kwargs):
+        with Connection(**args[0].connection_properties) as sftp:
+            func(*args, sftp = sftp, **kwargs)
+    return _open_connection
+
 class SFTP:
     """
     Represents a SFTP connection with methods to do basic communication using SFTP
@@ -33,7 +44,9 @@ class SFTP:
         self.connection_properties = self._connection_properties_check(connection_properties)
     
 
-    def _connection_properties_check(connection_properties):
+    def _connection_properties_check(self, connection_properties):
+        if "host" not in connection_properties.keys():
+            raise ValueError("Excepted a value for host in connection_properties")
 
         # removes need for user to import pysftp.CnOpts
         if "cnopts" in connection_properties.keys():
@@ -41,21 +54,10 @@ class SFTP:
                 connection_properties["cnopts"] = CnOpts(connection_properties["cnopts"])
             except Exception as e:
                 raise(f"Failed to instantiate CnOpts obj with the specified cnopts parameter. The error was {e}")
-        return connection_properties
-    
-
-    def _open_connection_decorator(connection_call_back: Callable, **kwargs):
-        """
-        Decorator to execute Callable within the context of the SFTP connection
-        """
-        def _open_connection(self):
-            with Connection(**self.connection_properties) as sftp:
-                connection_call_back(sftp, **kwargs)
-        return _open_connection
-
+        return connection_properties    
 
     @_open_connection_decorator
-    def send_to(self,sftp: Connection, remote_path: str):
+    def send_to(self, remote_path: str, **kwargs):
         """
         Sends all files in the Outbox folder to the specified remote_path using SFTP.
         Prior to being sent files are placed in the Awaiting folder.
@@ -63,35 +65,41 @@ class SFTP:
         INPUT:
             remote_path (str): path to the remote destination
         """
+        # get the sftp Connection passed from _open_connection_decorator as a kwarg
+        sftp = kwargs.pop("sftp")
+
         # get relative path to files
         files = os.listdir("Outbox")
         for file in files:
-            outbox_path = os.join("Outbox",file)
-            awaiting_path = os.join("Awaiting",file)
+            outbox_path = os.path.join("Outbox",file)
+            awaiting_path = os.path.join("Awaiting",file)
             # File is moved to make sure failed file deliveries don't clog up the system
             # Or make sure the same file can't mistakently be sent twice
             os.rename(outbox_path,awaiting_path)
 
             # Copy file to remote destination
-            remote_path = os.join(remote_path,file)
+            remote_path = os.path.join(remote_path,file)
             sftp.put(awaiting_path,remote_path)
             
             # Move file to sent
-            sent_path = os.join("Sent",file)
+            sent_path = os.path.join("Sent",file)
             os.rename(awaiting_path,sent_path)
 
 
     @_open_connection_decorator
-    def receive_from(self, sftp: Connection, remote_path: str):
+    def receive_from(self, remote_path: str, **kwargs):
         """
         Fetch all files on the remote path and place them into the local Inbox folder
 
         INPUT:
             remote_path (str): path to the remote destination from which files are fetched
         """
+        # get the sftp Connection passed from _open_connection_decorator as a kwarg
+        sftp = kwargs.pop("sftp")
+        
         remote_files = sftp.listdir(remote_path)
         for file_name in remote_files:
-            remote_file_path = os.join(remote_path, file_name)
+            remote_file_path = os.path.join(remote_path, file_name)
             # make sure a unique name is given to the file
             local_path = self._non_conflicting_name("Inbox",file_name)
             sftp.get(remote_file_path,local_path, preserve_mtime = True)
@@ -110,7 +118,7 @@ class SFTP:
         RETURNS:
             (str) non-conflicting filename
         """
-        file_path = os.join(local_path, file_name)
+        file_path = os.path.join(local_path, file_name)
         if os.path.exists(file_path):
             iterator += 1
 
@@ -141,6 +149,8 @@ class SFTP:
             paths_missing = self._find_missing_paths(paths_in_folder)
             self._setup(paths_missing = paths_missing, no_warning = True)
 
+        return True
+
 
     def _prompt_new_setup(self):
         """
@@ -159,7 +169,7 @@ class SFTP:
             return False
         return True
     
-    
+
     def _find_missing_paths(self,paths_in_folder: list[str]) -> list[str]:
         """
         Check if the paths_in_folder arg contains the required strings.
