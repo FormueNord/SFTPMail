@@ -7,41 +7,52 @@ class SFTP:
     Represents a SFTP connection with methods to do basic communication using SFTP
     
     INPUT:
-        host (str): server host name
-        username (str): username used for authentication
-        private_key (str): path to the SSH private key used to authenticate
-        knownhosts_path (str): path to .txt file containing known hosts' fingerprints
+        connection_properties (dict[str]): contains the connection properties. Content will be passed on the pysftp.Connection.
+            OBLIGATORY:
+                host (str): The hostname or IP of the remote machine
+            OPTIONAL:
+                username (str): Your username at the remote machine
+                private_key (str): path to the private key file or paramiko.AgentKey
+                password (str): Your password at the remote machine
+                port (str) *Default 22*: The SSH port of the remote machine
+                private_key_pass (str): password to use, if private_key is encrypted
+                cnopts (str): path to a readable file containing information on known hosts
+                default_path (str): set a default path upon connection
 
     ATTRIBUTES:
-        host (str): server host name
-        username (str): username used for authentication
-        private key (str): path to the SSH private key used to authenticate
-        cnopts (CnOpts): pysftp.CnOpts instance containing known hosts
+        connection_properties (dict[str]): contains the connection properties. 
+            If cnopts is specified its made into an instance of CnOpts
     """
 
     # defines the paths required to run the class.
     # if missing these paths will be created in the working directory
     required_paths = ["Inbox","Outbox","Sent","Awaiting"]
 
-    def __init__(self, host: str, username: str, private_key: str, knownhosts_path: str):
+    def __init__(self, connection_properties: dict[str]):
         self._check_if_setup()
-        self.host = host
-        self.username = username
-        self.private_key = private_key
-        self.cnopts = CnOpts(knownhosts_path)
+        self.connection_properties = self._connection_properties_check(connection_properties)
+    
+
+    def _connection_properties_check(connection_properties):
+
+        # removes need for user to import pysftp.CnOpts
+        if "cnopts" in connection_properties.keys():
+            try:
+                connection_properties["cnopts"] = CnOpts(connection_properties["cnopts"])
+            except Exception as e:
+                raise(f"Failed to instantiate CnOpts obj with the specified cnopts parameter. The error was {e}")
+        return connection_properties
+    
 
     def _open_connection_decorator(connection_call_back: Callable, **kwargs):
         """
         Decorator to execute Callable within the context of the SFTP connection
         """
         def _open_connection(self):
-            with Connection(
-                self.host,
-                self.username,
-                private_key=self.private_key,
-                cnopts = self.cnopts) as sftp:
+            with Connection(**self.connection_properties) as sftp:
                 connection_call_back(sftp, **kwargs)
         return _open_connection
+
 
     @_open_connection_decorator
     def send_to(self,sftp: Connection, remote_path: str):
@@ -68,6 +79,7 @@ class SFTP:
             # Move file to sent
             sent_path = os.join("Sent",file)
             os.rename(awaiting_path,sent_path)
+
 
     @_open_connection_decorator
     def receive_from(self, sftp: Connection, remote_path: str):
@@ -146,6 +158,7 @@ class SFTP:
             print("Setup was not run and the SFTP class is shutting down")
             return False
         return True
+    
     
     def _find_missing_paths(self,paths_in_folder: list[str]) -> list[str]:
         """
