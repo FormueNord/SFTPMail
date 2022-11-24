@@ -1,1 +1,1 @@
-from SFTPMail.SFTP import SFTP
+from SFTPMail.SFTP import SFTP, SFTPDecor
