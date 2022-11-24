@@ -3,15 +3,17 @@ from typing import Callable
 import os
 
 
+class SFTPDecor:
+    @classmethod
+    def _open_connection_decorator(self, func: Callable):
+        """
+        Decorator to execute Callable within the context of the SFTP connection
+        """
+        def _open_connection(*args, **kwargs):
+            with Connection(**args[0].connection_properties) as sftp:
+                func(*args, sftp = sftp, **kwargs)
+        return _open_connection
 
-def _open_connection_decorator(func: Callable):
-    """
-    Decorator to execute Callable within the context of the SFTP connection
-    """
-    def _open_connection(*args, **kwargs):
-        with Connection(**args[0].connection_properties) as sftp:
-            func(*args, sftp = sftp, **kwargs)
-    return _open_connection
 
 class SFTP:
     """
@@ -56,7 +58,7 @@ class SFTP:
                 raise(f"Failed to instantiate CnOpts obj with the specified cnopts parameter. The error was {e}")
         return connection_properties    
 
-    @_open_connection_decorator
+    @SFTPDecor._open_connection_decorator
     def send_to(self, remote_path: str, **kwargs):
         """
         Sends all files in the Outbox folder to the specified remote_path using SFTP.
@@ -86,7 +88,7 @@ class SFTP:
             os.rename(awaiting_path,sent_path)
 
 
-    @_open_connection_decorator
+    @SFTPDecor._open_connection_decorator
     def receive_from(self, remote_path: str, **kwargs):
         """
         Fetch all files on the remote path and place them into the local Inbox folder
