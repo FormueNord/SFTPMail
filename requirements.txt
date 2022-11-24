@@ -1,0 +1,5 @@
+gnupg==2.3.1
+mock==4.0.3
+pysftp==0.2.9
+pytest==7.0.0
+python_gnupg==0.4.6
