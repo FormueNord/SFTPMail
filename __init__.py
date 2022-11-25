@@ -1,2 +1,2 @@
-from SFTPMail.SFTP import SFTP, SFTPDecor
+from SFTPMail.SFTP import SFTP
 from SFTPMail.PGP import PGP
