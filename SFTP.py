@@ -1,7 +1,7 @@
 from pysftp import Connection, CnOpts
 from typing import Callable
 import os
-
+from SFTPMail.SFTPDecor import SFTPDecor
 
 class SFTPDecor:
     @classmethod
@@ -13,7 +13,6 @@ class SFTPDecor:
             with Connection(**args[0].connection_properties) as sftp:
                 func(*args, sftp = sftp, **kwargs)
         return _open_connection
-
 
 class SFTP:
     """
@@ -44,7 +43,6 @@ class SFTP:
     def __init__(self, connection_properties: dict[str]):
         self._check_if_setup()
         self.connection_properties = self._connection_properties_check(connection_properties)
-    
 
     def _connection_properties_check(self, connection_properties):
         if "host" not in connection_properties.keys():
@@ -57,6 +55,8 @@ class SFTP:
             except Exception as e:
                 raise(f"Failed to instantiate CnOpts obj with the specified cnopts parameter. The error was {e}")
         return connection_properties    
+    
+
 
     @SFTPDecor._open_connection_decorator
     def send_to(self, remote_path: str, **kwargs):
@@ -71,20 +71,25 @@ class SFTP:
         sftp = kwargs.pop("sftp")
 
         # get relative path to files
-        files = os.listdir("Outbox")
-        for file in files:
-            outbox_path = os.path.join("Outbox",file)
-            awaiting_path = os.path.join("Awaiting",file)
+        file_names = os.listdir("Outbox")
+        for file_name in file_names:
+            outbox_path = os.path.join("Outbox",file_name)
+            awaiting_path = os.path.join("Awaiting",file_name)
             # File is moved to make sure failed file deliveries don't clog up the system
             # Or make sure the same file can't mistakently be sent twice
             os.rename(outbox_path,awaiting_path)
 
-            # Copy file to remote destination
-            remote_path = os.path.join(remote_path,file)
-            sftp.put(awaiting_path,remote_path)
+            # If the system fails put the file from awaiting back into the Outbox before throwing an error
+            try:
+                # Copy file to remote destination
+                remote_path = os.path.join(remote_path,file_name)
+                sftp.put(awaiting_path,remote_path)
+            except Exception as e:
+                os.rename(awaiting_path, outbox_path)
+                raise Exception(f"Failed to put the file on the server. Moved {file_name} back into the Outbox folder. The error was {e}")
             
             # Move file to sent
-            sent_path = os.path.join("Sent",file)
+            sent_path = self._non_conflicting_name("Sent",file_name)
             os.rename(awaiting_path,sent_path)
 
 
@@ -108,19 +113,19 @@ class SFTP:
             sftp.remove(remote_path)
 
 
-    def _non_conflicting_name(self, local_path: str, file_name: str, iterator = 0):
+    def _non_conflicting_name(self, destination_path: str, file_name: str, iterator = 0):
         """
         Check if the filename already exists within the local folder.
         If there's a conflict add _x (where x is a number) to make a non-conflicting file name
 
         INPUT:
-            local_path (str): relative local path to a folder
+            destination_path (str): relative local path to a folder
             file_name (str): name of the file
 
         RETURNS:
             (str) non-conflicting filename
         """
-        file_path = os.path.join(local_path, file_name)
+        file_path = os.path.join(destination_path, file_name)
         if os.path.exists(file_path):
             iterator += 1
 
@@ -130,7 +135,7 @@ class SFTP:
             file_name = ".".join(file_name)
 
             # recurse until a non-conflicting name is found
-            file_path = self._new_file_name(local_path, file_name, iterator = iterator)
+            file_path = self._non_conflicting_name(destination_path, file_name, iterator = iterator)
         return file_path
 
 
@@ -218,3 +223,4 @@ class SFTP:
                 print(f"{folder_missing} folder not created since it already exists")
             
         print("Finished setting things up")
+
