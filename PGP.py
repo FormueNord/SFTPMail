@@ -1,6 +1,5 @@
 from gnupg import GPG
 import os
-import datetime
 import typing
 
 class PGP:
@@ -91,6 +90,7 @@ class PGP:
         RETURNS:
             file's decrypted content as a string | if file wasn't encrypted to begin with the file's content as a string
         """
+
         with open(file_path, "rb") as f:
 
             if  b'-----BEGIN PGP MESSAGE-----\r\n' not in f.readlines():
@@ -98,7 +98,8 @@ class PGP:
                 print("Returns the file content without decryption and without saving file if specified")
                 f.seek(0,0)
                 return f.read().decode(self.GPG.encoding)
- 
+
+            
             f.seek(0,0)
             decrypted = self.GPG.decrypt_file(
                 file = f,
@@ -106,7 +107,7 @@ class PGP:
                 **kwargs
             )
         
-        if not (decrypted.ok):
+        if not decrypted.ok:
             raise Exception(f"File: {file_path} was not decrypted correctly with error message {decrypted.__dict__['status']}")
 
         content = decrypted.data.decode(self.GPG.encoding)
@@ -118,7 +119,7 @@ class PGP:
         return content
         
 
-    def add_new_local_key(self, path: typing.Union[list[str], str]):
+    def add_new_local_key(self, paths: typing.Union[list[str], str]):
         """
         Adds a new key to the GNUPG keyring at the self.gpghome location (location is set on instantiation)
 
@@ -131,14 +132,13 @@ class PGP:
         # Eksempel på hvordan man importere krypteringsnøgler
 
         if isinstance(paths,str):
-            paths = list(paths)
+            paths = [paths]
 
         import_results = []
         for path in paths:
             with open(path,'r') as f:
                 key = f.read()
                 import_result = self.GPG.import_keys(key)
-            import_result = self.GPG.import_keys_file(path)
             import_results.append(import_result)
         return import_result
 
