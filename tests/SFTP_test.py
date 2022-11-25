@@ -2,7 +2,7 @@ import pytest
 import os
 from io import StringIO
 import shutil
-import SFTPMail
+from SFTPMail import SFTP
 
 
 connection_properties = {"host":"abcdefg.000.000.000"}
@@ -12,7 +12,7 @@ def clean_setup():
     Cleans up the files from the SFTP class in the working directory
     """
     paths_in_dir = os.listdir()
-    setupped_paths = SFTPMail.SFTP.required_paths
+    setupped_paths = SFTP.required_paths
 
     for path in setupped_paths:
         if path in paths_in_dir:
@@ -28,7 +28,7 @@ def make_setup(monkeypatch):
     """
     response = StringIO("y")
     monkeypatch.setattr("sys.stdin",response)
-    sftp = SFTPMail.SFTP(connection_properties)
+    sftp = SFTP(connection_properties)
     return sftp
 
 
@@ -38,7 +38,7 @@ def test_setup_yes(monkeypatch):
     """
     make_setup(monkeypatch)
 
-    setupped_paths = SFTPMail.SFTP.required_paths
+    setupped_paths = SFTP.required_paths
     paths_in_dir = os.listdir()
 
     # setup no longer needed so clean asap
@@ -54,7 +54,7 @@ def test_setup_no(monkeypatch):
     response = StringIO("n")
     monkeypatch.setattr("sys.stdin",response)
     before_setup = os.listdir()
-    sftp = SFTPMail.SFTP(connection_properties)
+    sftp = SFTP(connection_properties)
     after_setup = os.listdir()
 
     assert before_setup == after_setup, "Setup was denied and the content of the working directory should not have been changed, but it has"

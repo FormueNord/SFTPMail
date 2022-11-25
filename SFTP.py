@@ -1,7 +1,6 @@
 from pysftp import Connection, CnOpts
 from typing import Callable
 import os
-from SFTPMail.SFTPDecor import SFTPDecor
 
 class SFTPDecor:
     @classmethod
