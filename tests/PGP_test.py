@@ -1,6 +1,5 @@
-
-from SFTPMail import PGP
 import pytest
+from SFTPMail import PGP
 from mock import patch
 import os
 
