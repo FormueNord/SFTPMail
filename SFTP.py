@@ -53,6 +53,13 @@ class SFTP:
                 connection_properties["cnopts"] = CnOpts(connection_properties["cnopts"])
             except Exception as e:
                 raise(f"Failed to instantiate CnOpts obj with the specified cnopts parameter. The error was {e}")
+        else:
+            # https://stackoverflow.com/questions/38939454/verify-host-key-with-pysftp
+            print("It is advised to add a cnopts parameter to check for known host. Current connection is susceptible to man-in-the-middle attacks")
+            cnopts = CnOpts()
+            cnopts.hostkeys = None
+            connection_properties["cnopts"] = cnopts
+
         return connection_properties    
     
 
@@ -102,17 +109,37 @@ class SFTP:
         """
         # get the sftp Connection passed from _open_connection_decorator as a kwarg
         sftp = kwargs.pop("sftp")
-        
-        remote_files = sftp.listdir(remote_path)
+
+        # listdir_path needs to specify that its a subfolder to the default folder
+        if remote_path != None:
+            listdir_path = os.path.join(" ",remote_path)
+
+        remote_files = sftp.listdir(listdir_path)
         for file_name in remote_files:
             remote_file_path = os.path.join(remote_path, file_name)
             # make sure a unique name is given to the file
             local_path = self._non_conflicting_name("Inbox",file_name)
             sftp.get(remote_file_path,local_path, preserve_mtime = True)
-            sftp.remove(remote_path)
+            sftp.remove(remote_file_path)
+
+    def test_connection(self) -> dict:
+
+        @SFTPDecor._open_connection_decorator
+        def test_func(*args, **kwargs):
+            return
+        
+        result = {"OK":True, "Exception":None}
+
+        try:
+            test_func(self)
+            return result
+        except Exception as e:
+            result["Exception"] = e
+            result["OK"] = False
+            return result
 
 
-    def _non_conflicting_name(self, destination_path: str, file_name: str, iterator = 0):
+    def _non_conflicting_name(self, destination_path: str, file_name: str):
         """
         Check if the filename already exists within the local folder.
         If there's a conflict add _x (where x is a number) to make a non-conflicting file name
@@ -125,16 +152,20 @@ class SFTP:
             (str) non-conflicting filename
         """
         file_path = os.path.join(destination_path, file_name)
-        if os.path.exists(file_path):
+        iterator = 0
+        while os.path.exists(file_path):
             iterator += 1
 
-            # add _x as suffix to the file name
-            file_name = file_name.split(".")
-            file_name[0] = file_name[0] + "_" + str(iterator)
-            file_name = ".".join(file_name)
+            # add '_x' as suffix to the file name
+            file_path_split = file_path.split(".")
+            file_path_split[0] = file_path_split[0] + "_" + str(iterator)
+            file_path_try = ".".join(file_path_split)
 
-            # recurse until a non-conflicting name is found
-            file_path = self._non_conflicting_name(destination_path, file_name, iterator = iterator)
+            # check if new file path exists
+            if not os.path.exists(file_path_try):
+                file_path = file_path_try
+                break
+            
         return file_path
 
 
