@@ -125,7 +125,7 @@ class SFTP:
             local_path = self._non_conflicting_name("Inbox",file_name)
             sftp.get(remote_file_path,local_path, preserve_mtime = True)
             fetched_files.append(local_path)
-            #sftp.remove(remote_file_path)
+            sftp.remove(remote_file_path)
         
         return fetched_files
 
