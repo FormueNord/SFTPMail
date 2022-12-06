@@ -100,12 +100,14 @@ class SFTP:
 
 
     @SFTPDecor._open_connection_decorator
-    def receive_from(self, remote_path: str, **kwargs):
+    def receive_from(self, remote_path: str, **kwargs) -> list[str]:
         """
         Fetch all files on the remote path and place them into the local Inbox folder
 
         INPUT:
             remote_path (str): path to the remote destination from which files are fetched
+        RETURNS:
+            list of local paths to the files fetched from the server
         """
         # get the sftp Connection passed from _open_connection_decorator as a kwarg
         sftp = kwargs.pop("sftp")
@@ -114,13 +116,17 @@ class SFTP:
         if remote_path != None:
             listdir_path = os.path.join(" ",remote_path)
 
+        fetched_files = []
         remote_files = sftp.listdir(listdir_path)
         for file_name in remote_files:
             remote_file_path = os.path.join(remote_path, file_name)
             # make sure a unique name is given to the file
             local_path = self._non_conflicting_name("Inbox",file_name)
             sftp.get(remote_file_path,local_path, preserve_mtime = True)
+            fetched_files.append(local_path)
             sftp.remove(remote_file_path)
+        
+        return local_path
 
     def test_connection(self) -> dict:
 
