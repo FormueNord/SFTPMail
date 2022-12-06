@@ -58,6 +58,7 @@ class SFTP:
             print("It is advised to add a cnopts parameter to check for known host. Current connection is susceptible to man-in-the-middle attacks")
             cnopts = CnOpts()
             cnopts.hostkeys = None
+            print("cnopts.hostkeys has been set to = None")
             connection_properties["cnopts"] = cnopts
 
         return connection_properties    
