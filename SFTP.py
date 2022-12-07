@@ -10,7 +10,7 @@ class SFTPDecor:
         """
         def _open_connection(*args, **kwargs):
             with Connection(**args[0].connection_properties) as sftp:
-                func(*args, sftp = sftp, **kwargs)
+                return func(*args, sftp = sftp, **kwargs)
         return _open_connection
 
 class SFTP:
@@ -127,7 +127,7 @@ class SFTP:
             fetched_files.append(local_path)
             sftp.remove(remote_file_path)
         
-        return local_path
+        return fetched_files
 
     def test_connection(self) -> dict:
 
