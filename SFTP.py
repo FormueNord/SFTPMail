@@ -1,6 +1,8 @@
 from pysftp import Connection, CnOpts
-from typing import Callable
+from typing import Callable, Union
+from SFTPMail import PGP
 import os
+import shutil
 
 class SFTPDecor:
     @classmethod
@@ -39,9 +41,12 @@ class SFTP:
     # if missing these paths will be created in the working directory
     required_paths = ["Inbox","Outbox","Sent","Awaiting"]
 
-    def __init__(self, connection_properties: dict[str]):
+    def __init__(self, connection_properties: dict[str], pgp : PGP = None):
         self._check_if_setup()
         self.connection_properties = self._connection_properties_check(connection_properties)
+        self.pgp = pgp
+
+
 
     def _connection_properties_check(self, connection_properties):
         if "host" not in connection_properties.keys():
@@ -62,11 +67,72 @@ class SFTP:
             connection_properties["cnopts"] = cnopts
 
         return connection_properties    
-    
 
+    def _PGP(self, file_paths: Union[str,list[str]], encrypt_or_decrypt: str, **kwargs) -> list[str]:
+        """
+        PGP en/decrypts the file at file_path using the PGP object passed to SFTP, saves the file and returns output path.
+        output path if encrypt_or_decrypt = "encrypt" is Outbox\\file_name
+        output path if encrypt_or_decrypt = "decrypt" is Inbox\\file_name
+
+        ARGS:
+            file_path (str | list[str]): path(s) to file(s)
+            encrypt_or_decrypt (str): "encrypt" or "decrypt"
+
+        RETURNS:
+            output path for created encrypted file
+        """
+
+        if self.pgp == None:
+            raise Exception("The SFTP obj must have an assigned pgp value. Can be assigned during initialization.")
+        
+        if isinstance(file_paths,str):
+            file_paths = [file_paths]
+
+        file_names = [os.path.basename(file_path) for file_path in file_paths]
+        
+        if encrypt_or_decrypt.lower() == "encrypt":
+            file_content = self.pgp.encrypt(file_paths) 
+            file_output_paths = [self._non_conflicting_name("Outbox",file_name) for file_name in file_names]   
+        elif encrypt_or_decrypt.lower() == "decrypt":
+            file_content = self.pgp.decrypt(file_paths)
+            file_output_paths = [self._non_conflicting_name("Inbox",file_name) for file_name in file_names]
+        
+        for content, path in zip(file_content, file_output_paths):
+            with open(path, "w") as f:
+                f.write(content)
+        return file_output_paths
+
+    def _no_cryption(self, file_paths: Union[str,list[str]], encrypt_or_decrypt, **kwargs) -> list[str]:
+        """
+        Applies encryption to files and simply copies them to the Inbox/Outbox for further processing. Returns output path.
+        output path if encrypt_or_decrypt = "encrypt" is Outbox\\file_name
+        output path if encrypt_or_decrypt = "decrypt" is Inbox\\file_name
+
+        ARGS:
+            file_path (str | list[str]): path(s) to file(s)
+            encrypt_or_decrypt (str): "encrypt" or "decrypt"
+
+        RETURNS:
+            output path for file
+        """
+        if isinstance(file_paths, str):
+            file_paths = [file_paths]
+
+        if encrypt_or_decrypt.lower() == "encrypt":
+            dst_folder = "Outbox"
+        elif encrypt_or_decrypt.lower() == "decrypt":
+            dst_folder = "Inbox"
+        file_names = [os.path.basename(file_path) for file_path in file_paths]
+        file_output_paths = [self._non_conflicting_name(dst_folder,file_name) for file_name in file_names]
+
+        for src,dst in zip(file_paths,file_output_paths):
+            shutil.copy2(src,dst)
+        return file_output_paths
+    
+    cryption_methods = {"None":_no_cryption, "PGP": _PGP}
 
     @SFTPDecor._open_connection_decorator
-    def send_to(self, remote_path: str, **kwargs):
+    def send_to(self, remote_path: str, cryption_method: str = "None", **kwargs) -> None:
         """
         Sends all files in the Outbox folder to the specified remote_path using SFTP.
         Prior to being sent files are placed in the Awaiting folder.
@@ -79,21 +145,33 @@ class SFTP:
 
         # get relative path to files
         file_names = os.listdir("Outbox")
+
         for file_name in file_names:
             outbox_path = os.path.join("Outbox",file_name)
-            awaiting_path = os.path.join("Awaiting",file_name)
-            # File is moved to make sure failed file deliveries don't clog up the system
-            # Or make sure the same file can't mistakently be sent twice
+            awaiting_path = self._non_conflicting_name("Awaiting",file_name)
+            # make sure the same file can't mistakently be sent twice
             os.rename(outbox_path,awaiting_path)
+            remote_path = os.path.join(remote_path,file_name)
+            
+            # make sure exception can run and the wanted Exception is reached
+            file_to_send_path = ["temp"]
 
             # If the system fails put the file from awaiting back into the Outbox before throwing an error
             try:
+                # apply selected encryption method to file and return path of encrypted file
+                file_to_send_path = self.cryption_methods[cryption_method](self, awaiting_path, "encrypt")
                 # Copy file to remote destination
-                remote_path = os.path.join(remote_path,file_name)
-                sftp.put(awaiting_path,remote_path)
+                sftp.put(file_to_send_path,remote_path)
             except Exception as e:
-                os.rename(awaiting_path, outbox_path)
-                raise Exception(f"Failed to put the file on the server. Moved {file_name} back into the Outbox folder. The error was {e}")
+                # clean created files (if any) and move awaiting back to outbox before failing
+               if file_to_send_path[0] != awaiting_path and os.path.isfile(file_to_send_path):
+                   os.remove(file_to_send_path)
+               os.rename(awaiting_path, outbox_path)
+               raise Exception(f"Failed to put file {file_name} on the server. The error was {e}")
+            
+            # make sure any created encrypted file is deleted
+            if os.path.isfile(file_to_send_path[0]):
+                os.remove(file_to_send_path[0])
             
             # Move file to sent
             sent_path = self._non_conflicting_name("Sent",file_name)
@@ -101,7 +179,7 @@ class SFTP:
 
 
     @SFTPDecor._open_connection_decorator
-    def receive_from(self, remote_path: str, **kwargs) -> list[str]:
+    def receive_from(self, remote_path: str, cryption_method: str = "None", **kwargs) -> list[str]:
         """
         Fetch all files on the remote path and place them into the local Inbox folder
 
@@ -113,21 +191,23 @@ class SFTP:
         # get the sftp Connection passed from _open_connection_decorator as a kwarg
         sftp = kwargs.pop("sftp")
 
-        # listdir_path needs to specify that its a subfolder to the default folder
-        if remote_path != None:
-            listdir_path = os.path.join(" ",remote_path)
-
         fetched_files = []
-        remote_files = sftp.listdir(listdir_path)
+        remote_files = sftp.listdir(remote_path)
         for file_name in remote_files:
             remote_file_path = os.path.join(remote_path, file_name)
             # make sure a unique name is given to the file
-            local_path = self._non_conflicting_name("Inbox",file_name)
+            local_path = self._non_conflicting_name("Awaiting",file_name)
             sftp.get(remote_file_path,local_path, preserve_mtime = True)
             fetched_files.append(local_path)
             sftp.remove(remote_file_path)
-        
-        return fetched_files
+
+        # path to decrypted files. Files are created in or copied to Inbox directory
+        decrypted_fetched_files = self.cryption_methods[cryption_method](self, fetched_files, "decrypt")
+
+        # remove encrypted fetched files in awaiting
+        [os.remove(fetched_file) for fetched_file in fetched_files]
+
+        return decrypted_fetched_files
 
     def test_connection(self) -> dict:
 
@@ -146,7 +226,7 @@ class SFTP:
             return result
 
 
-    def _non_conflicting_name(self, destination_path: str, file_name: str):
+    def _non_conflicting_name(self, destination_path: str, file_name: str) -> str:
         """
         Check if the filename already exists within the local folder.
         If there's a conflict add _x (where x is a number) to make a non-conflicting file name
