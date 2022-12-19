@@ -2,11 +2,44 @@ import pytest
 import os
 from io import StringIO
 import shutil
+
+
+
+
+import mock
+class fake_Connection:
+
+        def __init__(*args, **kwargs):
+            return
+        
+        def __enter__():
+            print("Entering connection")
+        
+        def __exit__():
+            print("Exiting connection")
+
+        def listdir(self):
+            return os.listdir(r"tests\test_files")
+
+        def get(self, remote_file_path, local_path):
+            shutil.copy2(remote_file_path,local_path)
+
+        def remove(self, path):
+            return
+
+mock.patch("SFTP.Connection",fake_Connection).start()
+
 from SFTPMail import SFTP
+
+
 
 
 connection_properties = {"host":"abcdefg.000.000.000"}
 
+
+sftp = SFTP(connection_properties)
+sftp.receive_from("does not matter")
+print("stop")
 def clean_setup():
     """
     Cleans up the files from the SFTP class in the working directory
