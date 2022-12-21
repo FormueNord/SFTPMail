@@ -161,7 +161,7 @@ class SFTP:
                 # apply selected encryption method to file and return path of encrypted file
                 file_to_send_path = self.cryption_methods[cryption_method](self, awaiting_path, "encrypt")
                 assert len(file_to_send_path) == 1
-                # make list[str] into str
+                # make list[str] into str (should only contain one item)
                 file_to_send_path = file_to_send_path [0]
                 # Copy file to remote destination
                 sftp.put(file_to_send_path,remote_path)
@@ -173,8 +173,8 @@ class SFTP:
                raise Exception(f"Failed to put file {file_name} on the server. The error was {e}")
             
             # make sure any created encrypted file is deleted
-            if os.path.isfile(file_to_send_path[0]):
-                os.remove(file_to_send_path[0])
+            if os.path.isfile(file_to_send_path):
+                os.remove(file_to_send_path)
             
             # Move file to sent
             sent_path = self._non_conflicting_name("Sent",file_name)
