@@ -146,7 +146,7 @@ class PGP:
                     f.write(content)
                 
             content_holder.append(content)
-        return content
+        return content_holder
 
     def add_comment(self, content : str, comments : Union[str,list[str]] = default_comment) -> str:
         """
