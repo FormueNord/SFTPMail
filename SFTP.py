@@ -132,13 +132,13 @@ class SFTP:
     cryption_methods = {"None":_no_cryption, "PGP": _PGP}
 
     @SFTPDecor._open_connection_decorator
-    def send_to(self, remote_path: str, cryption_method: str = "None", **kwargs) -> None:
+    def send_to(self, remote_dst: str, cryption_method: str = "None", **kwargs) -> None:
         """
         Sends all files in the Outbox folder to the specified remote_path using SFTP.
         Prior to being sent files are placed in the Awaiting folder.
 
         INPUT:
-            remote_path (str): path to the remote destination
+            remote_dst (str): path to the remote destination
         """
         # get the sftp Connection passed from _open_connection_decorator as a kwarg
         sftp = kwargs.pop("sftp")
@@ -151,7 +151,7 @@ class SFTP:
             awaiting_path = self._non_conflicting_name("Awaiting",file_name)
             # make sure the same file can't mistakently be sent twice
             os.rename(outbox_path,awaiting_path)
-            remote_path = os.path.join(remote_path,file_name)
+            remote_path = os.path.join(remote_dst,file_name)
             
             # make sure exception can run and the wanted Exception is reached
             file_to_send_path = ["temp"]
@@ -160,6 +160,9 @@ class SFTP:
             try:
                 # apply selected encryption method to file and return path of encrypted file
                 file_to_send_path = self.cryption_methods[cryption_method](self, awaiting_path, "encrypt")
+                assert len(file_to_send_path) == 1
+                # make list[str] into str
+                file_to_send_path = file_to_send_path [0]
                 # Copy file to remote destination
                 sftp.put(file_to_send_path,remote_path)
             except Exception as e:
