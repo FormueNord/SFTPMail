@@ -120,13 +120,13 @@ class PGP:
 
         content_holder = []
         for path in file_path:
-            with open(path, "rb") as f:
+            with open(path, "r") as f:
                 # check if file is encrypted
                 if  self.message_beginning_indicator not in f.readlines():
                     print("It does not look as if the file is PGP encrypted")
                     print("Returns the file content without decryption and without saving file if specified")
                     f.seek(0,0)
-                    content_holder.append(f.read().decode(self.GPG.encoding))
+                    content_holder.append(f.read())
                     continue
 
                 f.seek(0,0)
@@ -207,3 +207,6 @@ class PGP:
             import_results.append(import_result)
         return import_result
 
+if __name__ == "__main__":
+    import gnupg
+    print(gnupg.__version__)
