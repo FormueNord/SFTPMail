@@ -101,12 +101,12 @@ class PGP:
             content_holder.append(content)
         return content_holder
 
-    def decrypt(self, file_path, always_trust = True, save_file = False, **kwargs) -> list[str]:
+    def decrypt(self, file_paths: Union(list[str], str), always_trust = True, save_file = False, **kwargs) -> list[str]:
         """
         Decrypts the files specified in a list of paths using stored private keys
         
         INPUT:
-            file_path (str): path to the file to be encrypted
+            file_path (list[str] | str): path to the file to be encrypted
             always_trust  (bool): trust the key matching self.recipient_fp?
             save_file (bool): if true file is saved with suffix .encrypted
             **kwargs: any kwargs is supplied to gnupg.GPG.decrypt_file()
@@ -115,11 +115,11 @@ class PGP:
             list with the decrypted content as strings for each item
         """
 
-        if isinstance(file_path, str):
-            file_path = [file_path]
+        if isinstance(file_paths, str):
+            file_paths = [file_paths]
 
         content_holder = []
-        for path in file_path:
+        for path in file_paths:
             with open(path, "rb") as f:
                 # check if file is encrypted
                 if  self.message_beginning_indicator not in f.readlines():
@@ -137,7 +137,7 @@ class PGP:
                 )
             
             if not decrypted.ok:
-                raise Exception(f"File: {file_path} was not decrypted correctly with error message {decrypted.__dict__['status']}")
+                raise Exception(f"File: {path} was not decrypted correctly with error message {decrypted.__dict__['status']}")
 
             content = decrypted.data.decode(self.GPG.encoding)
             
