@@ -2,6 +2,11 @@ from gnupg import GPG
 import os
 from typing import Union
 
+def foo():
+    print("I do nothing")
+
+
+
 class PGP:
     """
         A wrapper for the gnupg.GPG module making decryption and encryption cleaner and more user friendly.
@@ -72,7 +77,7 @@ class PGP:
 
         content_holder = []
         for path in file_path:
-            with open(path, "rb") as f:
+            with open(path, "r") as f:
                 encr_result = self.GPG.encrypt_file(
                     file = f,
                     recipients = self.recipient_fp,
@@ -84,7 +89,7 @@ class PGP:
             if not(encr_result.ok):
                 raise Exception(f"File: {path} was not encrypted correctly with error {encr_result.__dict__['status']}")
 
-            content = encr_result.data.decode(self.GPG.encoding)
+            content = encr_result.data
 
             # remove any carriage return
             # if this is deleted it creates double linespaces
