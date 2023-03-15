@@ -106,7 +106,7 @@ class PGP:
             content_holder.append(content)
         return content_holder
 
-    def decrypt(self, file_paths: Union(list[str], str), always_trust = True, save_file = False, **kwargs) -> list[str]:
+    def decrypt(self, file_paths: Union[list[str], str], always_trust = True, save_file = False, **kwargs) -> list[str]:
         """
         Decrypts the files specified in a list of paths using stored private keys
         

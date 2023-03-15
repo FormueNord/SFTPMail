@@ -71,8 +71,8 @@ class SFTP:
     def _PGP(self, file_paths: Union[str,list[str]], encrypt_or_decrypt: str, **kwargs) -> list[str]:
         """
         PGP en/decrypts the file at file_path using the PGP object passed to SFTP, saves the file and returns output path.
-        output path if encrypt_or_decrypt = "encrypt" is Outbox\\file_name
-        output path if encrypt_or_decrypt = "decrypt" is Inbox\\file_name
+        output path if encrypt_or_decrypt = "encrypt" is Outbox\file_name
+        output path if encrypt_or_decrypt = "decrypt" is Inbox\file_name
 
         ARGS:
             file_path (str | list[str]): path(s) to file(s)
