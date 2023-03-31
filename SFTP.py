@@ -79,7 +79,7 @@ class SFTP:
             encrypt_or_decrypt (str): "encrypt" or "decrypt"
 
         RETURNS:
-            output path for created encrypted file
+            list of output paths for created encrypted file
         """
 
         if self.pgp == None:
@@ -162,15 +162,20 @@ class SFTP:
                 file_to_send_path = self.cryption_methods[cryption_method](self, awaiting_path, "encrypt")
                 assert len(file_to_send_path) == 1
                 # make list[str] into str (should only contain one item)
-                file_to_send_path = file_to_send_path [0]
+                file_to_send_path = file_to_send_path[0]
                 # Copy file to remote destination
                 sftp.put(file_to_send_path,remote_path)
             except Exception as e:
+                # is run if self.cryption_methods fail in the above
+                if file_to_send_path[0] == "temp":
+                    os.rename(awaiting_path, outbox_path)
+                    raise Exception(f"Encryption failed, error code was: {e}")
+                
                 # clean created files (if any) and move awaiting back to outbox before failing
-               if file_to_send_path[0] != awaiting_path and os.path.isfile(file_to_send_path):
-                   os.remove(file_to_send_path)
-               os.rename(awaiting_path, outbox_path)
-               raise Exception(f"Failed to put file {file_name} on the server. The error was {e}")
+                if file_to_send_path[0] != awaiting_path and os.path.isfile(file_to_send_path[0]):
+                    os.remove(file_to_send_path)
+                os.rename(awaiting_path, outbox_path)
+                raise Exception(f"Failed to put file {file_name} on the server. The error was {e}")
             
             # make sure any created encrypted file is deleted
             if os.path.isfile(file_to_send_path):
