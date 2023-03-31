@@ -91,6 +91,11 @@ class PGP:
 
             content = encr_result.data
 
+            # sometimes content is bytes, sometimes content is str. I don't know why.
+            # convert bytes to string
+            if isinstance(content, bytes):
+                content = str(content)
+
             # remove any carriage return
             # if this is deleted it creates double linespaces
             content = content.replace("\r","") 
