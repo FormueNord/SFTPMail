@@ -77,7 +77,7 @@ class PGP:
 
         content_holder = []
         for path in file_path:
-            with open(path, "r") as f:
+            with open(path, "rb") as f:
                 encr_result = self.GPG.encrypt_file(
                     file = f,
                     recipients = self.recipient_fp,
